@@ -1116,6 +1116,17 @@ int scx_cgroup_bw_init(struct cgroup *cgrp __arg_trusted, struct scx_cgroup_init
 	u64 cgrp_id;
 	int ret;
 
+	/*
+	 * Kernels without cpu.max support for sched_ext lack the bw_* fields
+	 * in struct scx_cgroup_init_args. Bail out before any direct access
+	 * to those fields: the field access relocations cannot be resolved
+	 * on such kernels, and a reachable poisoned relocation fails the
+	 * whole program load. bpf_core_field_exists() resolves to a load-time
+	 * constant, so the rest of the function is pruned by the verifier.
+	 */
+	if (!is_kernel_compatible())
+		return 0;
+
 	cbw_dbg_cgrp(" level: %d -- period_us: %llu -- quota_us: %llu -- burst_us: %llu ",
 		     cgrp->level, args->bw_period_us, args->bw_quota_us, args->bw_burst_us);
 

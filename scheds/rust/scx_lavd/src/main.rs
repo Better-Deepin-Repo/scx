@@ -705,7 +705,12 @@ impl<'a> Scheduler<'a> {
         rodata.no_wake_sync = opts.no_wake_sync;
         rodata.no_slice_boost = opts.no_slice_boost;
         rodata.per_cpu_dsq = opts.per_cpu_dsq;
-        rodata.enable_cpu_bw = opts.enable_cpu_bw;
+        let has_cpu_bw = scx_utils::compat::struct_has_field("scx_cgroup_init_args", "bw_period_us")
+            .unwrap_or(false);
+        if !has_cpu_bw && opts.enable_cpu_bw {
+            warn!("Kernel does not support cgroup bandwidth control; disabling --enable-cpu-bw.");
+        }
+        rodata.enable_cpu_bw = opts.enable_cpu_bw && has_cpu_bw;
 
         if !ksym_exists("scx_group_set_bandwidth").unwrap() {
             skel.struct_ops.lavd_ops_mut().cgroup_set_bandwidth = std::ptr::null_mut();
