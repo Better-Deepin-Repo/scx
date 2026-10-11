@@ -576,7 +576,35 @@ impl<'a> Scheduler<'a> {
             ),
         ];
 
-        compat::cond_tracepoints_enable(tracepoints)
+        /*
+         * Attach the subset of tracepoints that exists on this kernel.
+         * Some futex tracepoints only exist on architectures with
+         * dedicated futex syscalls: x86_64 has only the futex and
+         * futex_waitv syscalls, so syscalls:sys_exit_futex_wait and
+         * syscalls:sys_exit_futex_wake are absent and the all-or-nothing
+         * helper would disable futex boost entirely. The
+         * sys_enter_futex + sys_exit_futex + sys_exit_futex_waitv trio
+         * already covers every futex operation on x86_64.
+         */
+        let mut enabled = 0;
+        for (tp, prog) in tracepoints.iter() {
+            if !compat::tracepoint_exists(tp)? {
+                debug!("tracepoint {tp} is missing, skipping");
+                continue;
+            }
+            unsafe {
+                libbpf_rs::libbpf_sys::bpf_program__set_autoload(
+                    prog.as_libbpf_object().as_ptr(),
+                    true,
+                );
+            }
+            enabled += 1;
+        }
+        if enabled > 0 {
+            info!("Futex boost enabled via tracepoints ({enabled} hooks).");
+        }
+
+        Ok(enabled > 0)
     }
 
     fn attach_execve_tracepoints(skel: &mut OpenBpfSkel) -> Result<bool> {
